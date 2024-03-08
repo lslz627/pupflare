@@ -6,6 +6,7 @@ const bodyParser = require('koa-bodyparser');
 const app = new Koa();
 app.use(bodyParser());
 const jsesc = require('jsesc');
+const proxyChain = require('proxy-chain');
 
 const requestHeadersToRemove = [
     "host", "user-agent", "accept-encoding", "content-length",
@@ -24,8 +25,13 @@ const responseHeadersToRemove = ["Accept-Ranges", "Content-Length", "Keep-Alive"
         options.headless = false;
     if (process.env.PUPPETEER_USERDATADIR)
         options.userDataDir = process.env.PUPPETEER_USERDATADIR;
-    if (process.env.PUPPETEER_PROXY)
-        options.args.push(`--proxy-server=${process.env.PUPPETEER_PROXY}`);
+    if (process.env.PUPPETEER_PROXY) {
+        proxyURL = process.env.PUPPETEER_PROXY
+        console.log(proxyURL)
+        proxyURL = await proxyChain.anonymizeProxy(proxyURL);
+        console.log(proxyURL)
+        options.args.push(`--proxy-server=${proxyURL}`);
+    }
     const browser = await puppeteer.launch(options);
     app.use(async ctx => {
         if (ctx.query.url) {
@@ -37,6 +43,10 @@ const responseHeadersToRemove = ["Accept-Ranges", "Content-Length", "Keep-Alive"
             let responseData;
             let responseHeaders;
             const page = await browser.newPage();
+            // await page.authenticate({ 
+            //   username: 'pro1',
+            //   password: 'pro1pass' 
+            // });
 
             await page.removeAllListeners('request');
             await page.setRequestInterception(true);
@@ -108,6 +118,7 @@ const responseHeadersToRemove = ["Accept-Ranges", "Content-Length", "Keep-Alive"
                         ctx.cookies.set(cookie.name, cookie.value, options);
                     });
             } catch (error) {
+                console.log(error)
                 if (!error.toString().includes("ERR_BLOCKED_BY_CLIENT")) {
                     ctx.status = 500;
                     ctx.body = error;
